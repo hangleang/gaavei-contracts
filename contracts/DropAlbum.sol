@@ -218,16 +218,22 @@ contract DropAlbum is ERC1155LazyMint {
 
         ClaimRestriction memory restriction = claimRestrictions[_tokenId];
         bytes32 targetRestrictionId = restrictionId[_tokenId];
-
         uint256 supplyClaimed = restriction.supplyClaimed;
 
+        // check if the token already reached max supply
+        if (targetRestrictionId != bytes32(0) && supplyClaimed == restriction.maxSupply) {
+            revert("MaxSupplyClaimed");
+        }
+
+        // if set for new token, or reset eligibility for existing claim
         if (targetRestrictionId == bytes32(0) || _resetClaimEligibility) {
             supplyClaimed = 0;
             targetRestrictionId = keccak256(abi.encodePacked(msg.sender, block.number, _tokenId));
         }
 
+        // check if supply already claimed is greater than updated max supply
         if (supplyClaimed > _restriction.maxSupply) {
-            revert("MaxSupplyClaimed");
+            revert("!MaxSupply");
         }
 
         ClaimRestriction memory updatedRestriction = ClaimRestriction({
@@ -249,13 +255,21 @@ contract DropAlbum is ERC1155LazyMint {
         return supplyClaimedByWallet[restrictionId[_tokenId]][_claimer];
     }
 
-    /// @notice allow contract admin to withdraw balance from drop
+    /// @notice allow contract admin to withdraw balance from drop, zero amount means withdraw all the balance
     function withdraw(address payable receiver, uint256 amount) external {
         if (!_canWithdraw()) {
             revert("Not authorized");
         }
+
+        // check balance with amount to withdraw
         uint256 balance = address(this).balance;
         require(amount <= balance, "!Amount");
+
+        // if given amount is zero, assume sender want to withdraw all
+        if (amount == 0) {
+            amount = balance;
+        }
+
         (bool sent, ) = receiver.call{ value: amount }("");
         require(sent, "Failed to withdraw");
 
